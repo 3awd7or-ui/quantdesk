@@ -1,10 +1,10 @@
 """Flask web app exposing the QuantDesk dashboard API and UI."""
 
-import os
 from pathlib import Path
 
 from flask import Flask, jsonify, render_template, request
 
+from .. import mt5bridge
 from ..backtest import run_backtest
 from ..data import DataFetchError, get_ohlcv
 from ..screener import scan
@@ -15,6 +15,11 @@ STATIC_DIR = Path(__file__).parent / "static"
 def create_app():
     app = Flask(__name__, template_folder=str(Path(__file__).parent / "templates"),
                 static_folder=str(STATIC_DIR), static_url_path="/static")
+
+    @app.errorhandler(mt5bridge.MT5Unavailable)
+    @app.errorhandler(mt5bridge.LiveAccountError)
+    def handle_mt5_error(exc):
+        return jsonify({"error": str(exc)}), 503
 
     @app.errorhandler(DataFetchError)
     def handle_fetch_error(exc):
@@ -73,5 +78,70 @@ def create_app():
         result = scan(market, min_rsi=min_rsi, max_rsi=max_rsi,
                       above_sma=above_sma, min_change_pct=min_change)
         return jsonify(result)
+
+    @app.get("/api/mt5/status")
+    def api_mt5_status():
+        status = {"connected": False, "mt5_package_installed": mt5bridge.MT5_AVAILABLE}
+        if mt5bridge.MT5_AVAILABLE:
+            try:
+                status = {**mt5bridge.account_status(),
+                          "mt5_package_installed": True}
+            except Exception:
+                pass
+        return jsonify(status)
+
+    @app.post("/api/mt5/connect")
+    def api_mt5_connect():
+        payload = request.get_json(silent=True) or {}
+        result = mt5bridge.connect(
+            login=payload.get("login") or None,
+            password=payload.get("password") or None,
+            server=payload.get("server") or None,
+            path=payload.get("path") or None,
+        )
+        return jsonify(result)
+
+    @app.get("/api/mt5/signal")
+    def api_mt5_signal():
+        symbol = request.args.get("symbol", "XAUUSD").upper()
+        timeframe = request.args.get("timeframe", "M15")
+        bars = mt5bridge.get_bars_mt5(symbol, timeframe, 500)
+        sessions = [tuple(map(int, s.split("-")))
+                    for s in request.args.get("sessions", "").split(",") if s]
+        signal = mt5bridge.evaluate_signal(
+            bars, symbol=symbol,
+            min_adx=float(request.args.get("min_adx", 20)),
+            ema_fast=int(request.args.get("ema_fast", 20)),
+            ema_slow=int(request.args.get("ema_slow", 100)),
+            sessions=sessions,
+        )
+        return jsonify(signal.__dict__)
+
+    @app.get("/api/mt5/positions")
+    def api_mt5_positions():
+        return jsonify(mt5bridge.open_positions())
+
+    @app.post("/api/mt5/execute")
+    def api_mt5_execute():
+        payload = request.get_json(silent=True) or {}
+        lots = float(payload.get("lots", 0.01))
+        result = mt5bridge.execute_signal(payload, lots=lots)
+        return jsonify(result)
+
+    @app.post("/api/mt5/close")
+    def api_mt5_close():
+        payload = request.get_json(silent=True) or {}
+        return jsonify(mt5bridge.close_position(int(payload["ticket"])))
+
+    @app.post("/api/mt5/breakeven")
+    def api_mt5_breakeven():
+        payload = request.get_json(silent=True) or {}
+        return jsonify(mt5bridge.move_stop_to_breakeven(int(payload["ticket"])))
+
+    @app.post("/api/mt5/trailing")
+    def api_mt5_trailing():
+        payload = request.get_json(silent=True) or {}
+        mult = float(payload.get("atr_mult", 2.0))
+        return jsonify(mt5bridge.trailing_stop_update(int(payload["ticket"]), atr_mult=mult))
 
     return app

@@ -6,6 +6,7 @@ import sys
 from .backtest import run_backtest
 from .data import DataFetchError, get_ohlcv, get_snapshot
 from .indicators import last_valid, rsi, sma
+from .mt5bridge import LiveAccountError, MT5Unavailable
 from .screener import scan
 
 
@@ -69,6 +70,36 @@ def cmd_web(args):
     app.run(host=args.host, port=args.port, debug=False)
 
 
+def cmd_mt5(args):
+    from . import mt5bridge
+    if args.command == "mt5-connect":
+        print(mt5bridge.connect(login=args.login, password=args.password, server=args.server))
+    elif args.command == "mt5-signal":
+        bars = mt5bridge.get_bars_mt5(args.symbol, args.timeframe, 500)
+        signal = mt5bridge.evaluate_signal(bars, symbol=args.symbol.upper(),
+                                           min_adx=args.min_adx,
+                                           ema_fast=args.ema_fast, ema_slow=args.ema_slow)
+        print(f"{signal.action.upper():<6} score={signal.score}/100  entry={signal.entry}  "
+              f"SL={signal.sl}  TP1={signal.tp1}  TP2={signal.tp2}")
+        for reason in signal.reasons:
+            print(f"  • {reason}")
+        if signal.blocked_reason:
+            print(f"  ممنوع: {signal.blocked_reason}")
+    elif args.command == "mt5-positions":
+        positions = mt5bridge.open_positions()
+        if not positions:
+            print("لا عُقود مفتوحة.")
+            return
+        for p in positions:
+            print(f"#{p['ticket']}  {p['symbol']:<8}{p['type']:<5}{p['volume']:>6.2f} لوت  "
+                  f"دخول={p['price_open']}  الآن={p['price_current']}  "
+                  f"SL={p['sl']}  TP={p['tp']}  ربح={p['profit']}")
+    elif args.command == "mt5-trail":
+        print(mt5bridge.trailing_stop_update(args.ticket, atr_mult=args.mult))
+    elif args.command == "mt5-close":
+        print(mt5bridge.close_position(args.ticket))
+
+
 def build_parser():
     parser = argparse.ArgumentParser(prog="quantdesk", description="QuantDesk — أدوات تداول كمّي")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -113,6 +144,32 @@ def build_parser():
     p.add_argument("--refresh", type=int, default=20)
     p.set_defaults(func=cmd_tui)
 
+    p = sub.add_parser("mt5-connect", help="اتصال بحساب MT5")
+    p.add_argument("--login", default=None)
+    p.add_argument("--password", default=None)
+    p.add_argument("--server", default=None)
+    p.set_defaults(func=cmd_mt5, command="mt5-connect")
+
+    p = sub.add_parser("mt5-signal", help="إشارة تداول من شارت MT5")
+    p.add_argument("--symbol", default="XAUUSD")
+    p.add_argument("--timeframe", default="M15")
+    p.add_argument("--min-adx", type=float, default=20.0)
+    p.add_argument("--ema-fast", type=int, default=20)
+    p.add_argument("--ema-slow", type=int, default=100)
+    p.set_defaults(func=cmd_mt5, command="mt5-signal")
+
+    p = sub.add_parser("mt5-positions", help="العقود المفتوحة")
+    p.set_defaults(func=cmd_mt5, command="mt5-positions")
+
+    p = sub.add_parser("mt5-trail", help="وقف متحرك على صفقة")
+    p.add_argument("ticket", type=int)
+    p.add_argument("--mult", type=float, default=2.0)
+    p.set_defaults(func=cmd_mt5, command="mt5-trail")
+
+    p = sub.add_parser("mt5-close", help="إغلاق صفقة")
+    p.add_argument("ticket", type=int)
+    p.set_defaults(func=cmd_mt5, command="mt5-close")
+
     p = sub.add_parser("web", help="تشغيل لوحة الويب")
     p.add_argument("--host", default="127.0.0.1")
     p.add_argument("--port", type=int, default=5000)
@@ -128,6 +185,9 @@ def main(argv=None):
     except DataFetchError as exc:
         print(f"خطأ في جلب البيانات: {exc}", file=sys.stderr)
         sys.exit(2)
+    except (MT5Unavailable, LiveAccountError) as exc:
+        print(f"MT5: {exc}", file=sys.stderr)
+        sys.exit(3)
 
 
 if __name__ == "__main__":

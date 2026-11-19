@@ -73,5 +73,14 @@ th, td { padding: 8px 12px; text-align: right; border-bottom: 1px solid var(--bo
 th { color: var(--muted); font-weight: normal; background: var(--panel); }
 tr:hover td { background: #1f2937; }
 .muted { color: var(--muted); font-size: 13px; }
+.mt5-card { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 14px 16px; margin-bottom: 16px; max-width: 1100px; }
+.mt5-card h3 { margin: 4px 0 10px; font-size: 15px; }
+.signal-box { padding: 12px; border-radius: 8px; border: 1px solid var(--border); display: flex; gap: 20px; flex-wrap: wrap; align-items: center; }
+.signal-buy { background: rgba(63,185,80,.08); border-color: var(--up); }
+.signal-sell { background: rgba(248,81,73,.08); border-color: var(--down); }
+.signal-none { background: rgba(139,148,158,.06); }
+.signal-action { font-size: 22px; font-weight: bold; min-width: 130px; }
+.score { font-size: 26px; font-weight: bold; }
+.reasons { color: var(--muted); font-size: 13px; max-width: 380px; }
 footer { padding: 14px 24px; color: var(--muted); font-size: 12px; border-top: 1px solid var(--border); }
 #market-status { color: var(--muted); font-size: 13px; }

@@ -13,6 +13,7 @@
     <button class="tab active" data-tab="dashboard">لوحة الأسعار</button>
     <button class="tab" data-tab="backtest">مُختبر الاستراتيجيات</button>
     <button class="tab" data-tab="screener">المُصفّي</button>
+    <button class="tab" data-tab="mt5">ميتاتريدر 5</button>
   </nav>
 </header>
 
@@ -52,7 +53,47 @@
     <div id="bt-trades"></div>
   </section>
 
-  <section id="tab-screener" class="panel hidden">
+  <section id="tab-mt5" class="panel hidden">
+    <div class="controls">
+      <span id="mt5-status" class="muted">جارٍ فحص الاتصال…</span>
+    </div>
+    <div id="mt5-connect-box" class="mt5-card hidden">
+      <h3>الاتصال بالمحطة والحساب</h3>
+      <div class="controls">
+        <input id="mt5-login" placeholder="Login رقم الحساب" style="width:150px">
+        <input id="mt5-password" type="password" placeholder="كلمة المرور" style="width:150px">
+        <input id="mt5-server" placeholder="الخادم (مثل: Exness-MT5Trial8)" style="width:200px">
+        <button id="mt5-connect-btn">اتصال</button>
+      </div>
+      <p class="muted">يجب أن تكون منصة MT5 مثبتة وتعمل، وأن يكون الخيار "Algo Trading" مفعّلاً فيها. حزمة MetaTrader5 لا تعمل إلا على ويندوز.</p>
+    </div>
+
+    <div class="mt5-card">
+      <div class="controls">
+        <input id="mt5-symbol" value="XAUUSD" placeholder="الرمز (XAUUSD, EURUSD...)">
+        <select id="mt5-timeframe">
+          <option value="M1">M1</option><option value="M5">M5</option>
+          <option value="M15" selected>M15</option><option value="H1">H1</option>
+          <option value="H4">H4</option><option value="D1">D1</option>
+        </select>
+        <label>ADX ≥ <input id="mt5-min-adx" type="number" value="20" style="width:60px"></label>
+        <label>EMA <input id="mt5-ema-fast" type="number" value="20" style="width:56px"> / <input id="mt5-ema-slow" type="number" value="100" style="width:56px"></label>
+        <label>جلسات UTC <input id="mt5-sessions" placeholder="مثل: 7-12,14-19" style="width:120px"></label>
+        <button id="mt5-scan-btn">فحص الإشارة</button>
+        <label><input id="mt5-sound" type="checkbox" checked> صوت</label>
+      </div>
+      <div id="mt5-signal-box"><p class="muted">اضغط "فحص الإشارة" لعرض الدخول/الخروج.</p></div>
+    </div>
+
+    <div class="mt5-card">
+      <div class="controls">
+        <label>الحجم (لوت) <input id="mt5-lots" type="number" value="0.01" step="0.01" min="0.01" style="width:80px"></label>
+        <span class="muted">التنفيذ يعمل على حسابات Demo فقط — الحسابات الحقيقية محجوبة تلقائياً</span>
+      </div>
+      <h3>العقود المفتوحة في MT5</h3>
+      <div id="mt5-positions"><p class="muted">لم يُفحص بعد.</p></div>
+    </div>
+  </section>
     <div class="controls">
       <select id="sc-market">
         <option value="crypto">عملات رقمية</option>

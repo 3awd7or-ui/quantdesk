@@ -202,3 +202,159 @@ $("bt-run").addEventListener("click", runBacktest);
 $("sc-run").addEventListener("click", runScreener);
 
 loadDashboard();
+
+/* ============ MT5 tab ============ */
+async function postJson(path, body) {
+  const res = await fetch(path, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body || {}),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || "HTTP " + res.status);
+  return data;
+}
+
+function beep() {
+  if (!$("mt5-sound").checked) return;
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const osc = ctx.createOscillator(), gain = ctx.createGain();
+    osc.connect(gain); gain.connect(ctx.destination);
+    osc.frequency.value = 880; gain.gain.value = 0.15;
+    osc.start();
+    setTimeout(() => { osc.stop(); ctx.close(); }, 400);
+  } catch (e) {}
+}
+
+async function mt5RefreshStatus() {
+  try {
+    const st = await api("/api/mt5/status");
+    if (!st.mt5_package_installed) {
+      $("mt5-status").textContent = "حزمة MetaTrader5 غير مثبتة — شغّل: pip install MetaTrader5 (ويندوز فقط)";
+      $("mt5-connect-box").classList.add("hidden");
+      return;
+    }
+    if (st.connected) {
+      $("mt5-status").innerHTML =
+        "متصل: " + st.login + " @ " + st.server + " — الرصيد: " + fmt(st.balance) + " " + st.currency + " · " +
+        (st.is_demo ? '<span class="up">حساب تجريبي (Demo) — التنفيذ مفعّل</span>'
+                    : '<span class="down">حساب حقيقي — التنفيذ محجوب تلقائياً</span>');
+      $("mt5-connect-box").classList.add("hidden");
+    } else {
+      $("mt5-status").textContent = "غير متصل بمنصة MT5";
+      $("mt5-connect-box").classList.remove("hidden");
+    }
+  } catch (e) {
+    $("mt5-status").textContent = "خطأ فحص الاتصال: " + e.message;
+  }
+}
+
+async function mt5Connect() {
+  try {
+    const r = await postJson("/api/mt5/connect", {
+      login: $("mt5-login").value, password: $("mt5-password").value,
+      server: $("mt5-server").value,
+    });
+    beep();
+    $("mt5-status").innerHTML = "متصل: " + r.login + " @ " + r.server + " — الرصيد: " + fmt(r.balance) + " · " + (r.is_demo ? "Demo" : "حقيقي");
+    $("mt5-connect-box").classList.add("hidden");
+  } catch (e) {
+    $("mt5-status").innerHTML = '<span class="down">فشل الاتصال: ' + e.message + "</span>";
+  }
+}
+
+async function mt5Scan() {
+  const box = $("mt5-signal-box");
+  const params = {
+    symbol: $("mt5-symbol").value.trim().toUpperCase(),
+    timeframe: $("mt5-timeframe").value,
+    min_adx: $("mt5-min-adx").value,
+    ema_fast: $("mt5-ema-fast").value,
+    ema_slow: $("mt5-ema-slow").value,
+    sessions: $("mt5-sessions").value.trim(),
+  };
+  box.innerHTML = '<p class="muted">جارٍ التحليل…</p>';
+  try {
+    const prev = window._mt5LastAction;
+    const s = await api("/api/mt5/signal", params);
+    window._mt5LastAction = s.action;
+    if (s.action !== "none" && s.score >= 50 && prev !== s.action) beep();
+    const cls = s.action === "buy" ? "signal-buy" : (s.action === "sell" ? "signal-sell" : "signal-none");
+    const label = s.action === "buy" ? "BUY — الدخول شراء" : (s.action === "sell" ? "SELL — الدخول بيع" : "NO TRADE — لا إشارة");
+    const blocked = s.blocked_reason ? '<div class="down">' + s.blocked_reason + "</div>" : "";
+    const levels = s.action !== "none" ? `
+        <div class="stat"><div class="label">دخول</div><div class="value">${fmt(s.entry, 3)}</div></div>
+        <div class="stat"><div class="label">SL</div><div class="value down">${fmt(s.sl, 3)}</div></div>
+        <div class="stat"><div class="label">TP1</div><div class="value up">${fmt(s.tp1, 3)}</div></div>
+        <div class="stat"><div class="label">TP2</div><div class="value up">${fmt(s.tp2, 3)}</div></div>` : "";
+    box.innerHTML = `
+      <div class="signal-box ${cls}">
+        <div><div class="signal-action ${s.action === 'buy' ? 'up' : (s.action === 'sell' ? 'down' : '')}">${label}</div>
+        <div class="score">${s.score}<span class="muted">/100</span></div></div>
+        ${levels}
+        ${s.action !== "none" ? `<button id="mt5-exec-btn">${s.action === 'buy' ? 'شراء الآن' : 'بيع الآن'} (Demo)</button>` : ""}
+        <div class="reasons">${s.reasons.join("<br>") || "—"}${blocked}</div>
+      </div>`;
+    const execBtn = $("mt5-exec-btn");
+    if (execBtn) execBtn.addEventListener("click", () => mt5Execute(s));
+  } catch (e) {
+    box.innerHTML = '<div class="down">خطأ: ' + e.message + "</div>";
+  }
+}
+
+async function mt5Execute(signalData) {
+  signalData.lots = $("mt5-lots").value;
+  try {
+    const r = await postJson("/api/mt5/execute", signalData);
+    beep();
+    $("mt5-signal-box").innerHTML =
+      '<div class="signal-box signal-buy"><div><div class="signal-action up">تم التنفيذ ✓</div>' +
+      '<div class="reasons">العقد: ' + r.ticket + " · السعر: " + fmt(r.price, 3) + " · SL: " + fmt(r.sl, 3) + " · TP2: " + fmt(r.tp2, 3) + "</div></div></div>";
+    mt5Positions();
+  } catch (e) {
+    $("mt5-signal-box").innerHTML += '<div class="down">فشل التنفيذ: ' + e.message + "</div>";
+  }
+}
+
+async function mt5Positions() {
+  try {
+    const list = await api("/api/mt5/positions");
+    if (!list.length) {
+      $("mt5-positions").innerHTML = '<p class="muted">لا عُقود مفتوحة حالياً.</p>';
+      return;
+    }
+    const rows = list.map(p => `
+      <tr><td>${p.ticket}</td><td>${p.symbol}</td><td class="${p.type === 'buy' ? 'up' : 'down'}">${p.type === 'buy' ? 'شراء' : 'بيع'}</td>
+      <td>${fmt(p.volume, 2)}</td><td>${fmt(p.price_open, 3)}</td><td>${fmt(p.price_current, 3)}</td>
+      <td>${fmt(p.sl, 3)}</td><td>${fmt(p.tp, 3)}</td>
+      <td class="${p.profit >= 0 ? 'up' : 'down'}">${fmt(p.profit)}</td>
+      <td><button data-a="be" data-t="${p.ticket}">نقل SL للتعادل</button>
+      <button data-a="tr" data-t="${p.ticket}">وقف متحرك ATR</button>
+      <button data-a="cl" data-t="${p.ticket}">إغلاق</button></td></tr>`).join("");
+    $("mt5-positions").innerHTML =
+      "<table><tr><th>رقم</th><th>الرمز</th><th>النوع</th><th>حجم</th><th>دخول</th><th>الآن</th><th>SL</th><th>TP</th><th>ربح/خسارة</th><th>إدارة</th></tr>" + rows + "</table>";
+    $("mt5-positions").querySelectorAll("button").forEach(btn => {
+      btn.addEventListener("click", async () => {
+        const path = { be: "/api/mt5/breakeven", tr: "/api/mt5/trailing", cl: "/api/mt5/close" }[btn.dataset.a];
+        try {
+          await postJson(path, { ticket: btn.dataset.t, atr_mult: 2.0 });
+          mt5Positions();
+        } catch (e) { alert("خطأ: " + e.message); }
+      });
+    });
+  } catch (e) {
+    $("mt5-positions").innerHTML = '<div class="down">خطأ: ' + e.message + "</div>";
+  }
+}
+
+$("mt5-connect-btn").addEventListener("click", mt5Connect);
+$("mt5-scan-btn").addEventListener("click", mt5Scan);
+mt5RefreshStatus();
+
+setInterval(() => {
+  if (!document.getElementById("tab-mt5").classList.contains("hidden")) {
+    mt5RefreshStatus();
+    mt5Positions();
+  }
+}, 5000);

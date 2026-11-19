@@ -108,6 +108,52 @@ def bollinger(values, period=20, num_std=2.0):
     return mid, upper, lower
 
 
+def adx(highs, lows, closes, period=14):
+    """Wilder's ADX plus +DI and -DI, aligned to bar indices."""
+    n = len(closes)
+    plus_di = [None] * n
+    minus_di = [None] * n
+    out = [None] * n
+    if n < period * 2 + 1:
+        return out, plus_di, minus_di
+    tr_list, plus_dm, minus_dm = [], [], []
+    for i in range(1, n):
+        up = highs[i] - highs[i - 1]
+        down = lows[i - 1] - lows[i]
+        plus_dm.append(up if (up > down and up > 0) else 0.0)
+        minus_dm.append(down if (down > up and down > 0) else 0.0)
+        tr_list.append(max(highs[i] - lows[i],
+                           abs(highs[i] - closes[i - 1]),
+                           abs(lows[i] - closes[i - 1])))
+    atr_ = sum(tr_list[:period])
+    p_dm = sum(plus_dm[:period])
+    m_dm = sum(minus_dm[:period])
+    dxs = []
+    for k in range(period, n - 1):
+        atr_ = atr_ - atr_ / period + tr_list[k]
+        p_dm = p_dm - p_dm / period + plus_dm[k]
+        m_dm = m_dm - m_dm / period + minus_dm[k]
+        if atr_ > 0:
+            pdi = 100.0 * p_dm / atr_
+            mdi = 100.0 * m_dm / atr_
+            plus_di[k + 1] = pdi
+            minus_di[k + 1] = mdi
+            denom = pdi + mdi
+            dxs.append(100.0 * abs(pdi - mdi) / denom if denom > 0 else 0.0)
+        else:
+            dxs.append(0.0)
+    if len(dxs) < period:
+        return out, plus_di, minus_di
+    adx_val = sum(dxs[:period]) / period
+    out[2 * period] = adx_val
+    for j in range(period, len(dxs)):
+        adx_val = (adx_val * (period - 1) + dxs[j]) / period
+        pos = j + period + 1
+        if pos < n:
+            out[pos] = adx_val
+    return out, plus_di, minus_di
+
+
 def last_valid(series):
     for v in reversed(series):
         if v is not None:
