@@ -1,8 +1,9 @@
 import unittest
+from unittest.mock import patch
 
 from quantdesk.indicators import atr, bollinger, ema, last_valid, macd, rsi, sma
 from quantdesk.backtest import BacktestResult, run_backtest
-from quantdesk.data import Bar
+from quantdesk.data import Bar, DataFetchError
 from quantdesk.screener import scan
 
 
@@ -104,18 +105,43 @@ class TestBacktest(unittest.TestCase):
             run_backtest([], "sma")
 
 
+def fake_bars(n=60, base=100.0, drift=0.3, date_prefix="2024-01-"):
+    from datetime import date, timedelta
+    day = date(2024, 1, 1)
+    return [Bar((day + timedelta(days=i)).isoformat(), (base + drift * i) * 1.01,
+                (base + drift * i) * 1.02, (base + drift * i) * 0.98,
+                base + drift * i, 1_000_000.0) for i in range(n)]
+
+
+def failing_bars(symbols_error, symbol):
+    if symbol in symbols_error:
+        raise DataFetchError("boom")
+    return fake_bars(60, drift=0.5 if symbol == "UPUSDT" else -1.2)
+
+
 class TestScreener(unittest.TestCase):
     def test_scan_filters_with_error_handling(self):
-        result = scan("crypto", symbols=["BTCUSDT", "BAD??PAIR"], days=120)
+        with patch("quantdesk.screener.get_ohlcv", side_effect=lambda m, s, days: failing_bars(["BADPAIR"], s)):
+            result = scan("crypto", symbols=["BTCUSDT", "BADPAIR"], days=120)
         self.assertTrue(any(r["symbol"] == "BTCUSDT" for r in result["rows"]))
-        self.assertTrue(any(e["symbol"] == "BAD??PAIR" for e in result["errors"]))
+        self.assertTrue(any(e["symbol"] == "BADPAIR" for e in result["errors"]))
         for row in result["rows"]:
             self.assertLessEqual(row["rsi"], 100)
 
     def test_rows_sorted_by_rsi(self):
-        result = scan("crypto", symbols=["BTCUSDT", "ETHUSDT"], days=150)
+        with patch("quantdesk.screener.get_ohlcv",
+                   side_effect=lambda m, s, days: failing_bars([], s)):
+            result = scan("crypto", symbols=["BTCUSDT", "ETHUSDT"], days=150)
         rsi_values = [r["rsi"] for r in result["rows"]]
         self.assertEqual(rsi_values, sorted(rsi_values, reverse=True))
+
+    def test_rsi_filter_selects_and_excludes(self):
+        with patch("quantdesk.screener.get_ohlcv",
+                   side_effect=lambda m, s, days: fake_bars(80)):
+            included = scan("crypto", symbols=["UPUSDT"], min_rsi=99, max_rsi=100.0)
+            excluded = scan("crypto", symbols=["UPUSDT"], min_rsi=0, max_rsi=95)
+        self.assertTrue(any(r["symbol"] == "UPUSDT" for r in included["rows"]))
+        self.assertFalse(any(r["symbol"] == "UPUSDT" for r in excluded["rows"]))
 
 
 if __name__ == "__main__":
