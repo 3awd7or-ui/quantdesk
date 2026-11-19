@@ -1,0 +1,77 @@
+:root {
+  --bg: #0d1117;
+  --panel: #161b22;
+  --border: #30363d;
+  --text: #e6edf3;
+  --muted: #8b949e;
+  --up: #3fb950;
+  --down: #f85149;
+  --accent: #58a6ff;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  font-family: "Tahoma", "Segoe UI", system-ui, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+}
+header {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  padding: 12px 24px;
+  border-bottom: 1px solid var(--border);
+  background: var(--panel);
+}
+h1 { font-size: 20px; margin: 0; color: var(--accent); }
+nav { display: flex; gap: 8px; }
+.tab {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--muted);
+  padding: 8px 16px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 14px;
+}
+.tab.active { color: var(--text); border-color: var(--accent); background: #1f2937; }
+main { padding: 20px 24px; }
+.panel.hidden { display: none; }
+.controls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+.controls input, .controls select, .controls button {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 8px 12px;
+  border-radius: 6px;
+  font-size: 14px;
+}
+.controls button { cursor: pointer; border-color: var(--accent); color: var(--accent); }
+.controls button:hover { background: #1f2937; }
+.controls label { color: var(--muted); font-size: 13px; }
+.stats { display: flex; gap: 18px; flex-wrap: wrap; margin-bottom: 16px; }
+.stat {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 16px;
+  min-width: 130px;
+}
+.stat .label { color: var(--muted); font-size: 12px; }
+.stat .value { font-size: 18px; font-weight: bold; margin-top: 4px; }
+.up { color: var(--up); }
+.down { color: var(--down); }
+canvas { width: 100%; max-width: 1100px; background: var(--panel); border: 1px solid var(--border); border-radius: 8px; }
+table { border-collapse: collapse; width: 100%; max-width: 900px; margin-top: 12px; }
+th, td { padding: 8px 12px; text-align: right; border-bottom: 1px solid var(--border); }
+th { color: var(--muted); font-weight: normal; background: var(--panel); }
+tr:hover td { background: #1f2937; }
+.muted { color: var(--muted); font-size: 13px; }
+footer { padding: 14px 24px; color: var(--muted); font-size: 12px; border-top: 1px solid var(--border); }
+#market-status { color: var(--muted); font-size: 13px; }
